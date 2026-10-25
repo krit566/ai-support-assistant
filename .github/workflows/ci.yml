@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Tests
+        run: python -m pytest -q
+      - name: Evaluation (offline; fails the build if retrieval drops below the agreed floor)
+        run: |
+          python eval/run_eval.py > eval_out.json
+          python -c "import json; r=json.load(open('eval/results_lsa.json')); m=r['retrieval_test']['hybrid']; assert m['recall@3'] >= 0.9, m; print('recall@3 ok:', m['recall@3'])"
+      - name: Docker image builds
+        run: docker build -t ai-support-assistant .

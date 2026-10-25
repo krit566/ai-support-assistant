@@ -1,0 +1,13 @@
+# One-click deploy on Render (free tier): New + > Blueprint > pick this repo.
+services:
+  - type: web
+    name: ai-support-assistant
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn assistant.api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.4"
+      # optional LLM answers: set GROQ_API_KEY in the Render dashboard (never in this file) and USE_LLM=true

@@ -1,0 +1,46 @@
+{"id": "q01", "split": "dev", "question": "Is there a fee to register for placements?", "doc": "01-portal-registration", "fact": "no registration fee"}
+{"id": "q02", "split": "dev", "question": "My CGPA on the portal is wrong, how do I fix it?", "doc": "02-profile-updates", "fact": "correction request"}
+{"id": "q03", "split": "dev", "question": "Does a 6.99 CGPA count for a 7 cutoff?", "doc": "03-eligibility", "fact": "6.99 does not meet"}
+{"id": "q04", "split": "dev", "question": "What does the shortlisted status mean?", "doc": "05-application-status", "fact": "selected you for the next round"}
+{"id": "q05", "split": "dev", "question": "What happens if I skip two interviews without telling anyone?", "doc": "06-withdrawing", "fact": "30 days"}
+{"id": "q06", "split": "dev", "question": "How big can my resume file be?", "doc": "09-documents", "fact": "2 MB"}
+{"id": "q07", "split": "dev", "question": "When does the main placement season happen?", "doc": "17-placement-calendar", "fact": "August to December"}
+{"id": "q08", "split": "dev", "question": "How many wrong passwords before my account gets locked?", "doc": "16-password-reset", "fact": "5 failed login attempts"}
+{"id": "q09", "split": "dev", "question": "Can I apply to a better company after accepting an offer?", "doc": "07-one-offer-policy", "fact": "1.5 times"}
+{"id": "q10", "split": "dev", "question": "Which documents do companies get about me?", "doc": "20-data-privacy", "fact": "name, roll number"}
+{"id": "q11", "split": "dev", "question": "What is the hostel curfew time?", "doc": null, "fact": null}
+{"id": "q12", "split": "dev", "question": "How do I apply for a scholarship?", "doc": null, "fact": null}
+{"id": "q13", "split": "dev", "question": "What is the library fine for late books?", "doc": null, "fact": null}
+{"id": "q14", "split": "dev", "question": "Who is the head of the computer science department?", "doc": null, "fact": null}
+{"id": "q15", "split": "test", "question": "When does registration on the placement portal close?", "doc": "01-portal-registration", "fact": "31 July"}
+{"id": "q16", "split": "test", "question": "Someone asked me to pay money to register for placements, is that real?", "doc": "01-portal-registration", "fact": "fraudulent"}
+{"id": "q17", "split": "test", "question": "How long after results does my CGPA get updated?", "doc": "02-profile-updates", "fact": "10 working days"}
+{"id": "q18", "split": "test", "question": "Why can't I apply to anything even though I registered?", "doc": "02-profile-updates", "fact": "unverified profile"}
+{"id": "q19", "split": "test", "question": "Am I eligible if I still have an uncleared subject?", "doc": "03-eligibility", "fact": "active backlog"}
+{"id": "q20", "split": "test", "question": "Is a one year gap in studies a problem?", "doc": "03-eligibility", "fact": "up to one year"}
+{"id": "q21", "split": "test", "question": "Can the deadline be extended just for me?", "doc": "04-applying", "fact": "cannot reopen"}
+{"id": "q22", "split": "test", "question": "At what time do applications close on the last day?", "doc": "04-applying", "fact": "11:59 PM"}
+{"id": "q23", "split": "test", "question": "Which application statuses can never change again?", "doc": "05-application-status", "fact": "final"}
+{"id": "q24", "split": "test", "question": "Can I withdraw after my interview is scheduled?", "doc": "06-withdrawing", "fact": "cannot withdraw"}
+{"id": "q25", "split": "test", "question": "I accepted an offer and now want to back out, what happens?", "doc": "07-one-offer-policy", "fact": "barred"}
+{"id": "q26", "split": "test", "question": "How early are interview slots announced?", "doc": "08-interviews", "fact": "48 hours"}
+{"id": "q27", "split": "test", "question": "Can I swap my interview slot with a friend?", "doc": "08-interviews", "fact": "written approval"}
+{"id": "q28", "split": "test", "question": "What should I wear for an online interview?", "doc": "08-interviews", "fact": "business-casual"}
+{"id": "q29", "split": "test", "question": "What should I name my resume file?", "doc": "09-documents", "fact": "RollNumber_Name.pdf"}
+{"id": "q30", "split": "test", "question": "Which marksheets must I upload before applying?", "doc": "09-documents", "fact": "Class X and Class XII"}
+{"id": "q31", "split": "test", "question": "Is the company presentation before the test compulsory?", "doc": "10-attendance", "fact": "mandatory"}
+{"id": "q32", "split": "test", "question": "Does a PPO count as being placed?", "doc": "11-internships", "fact": "counts as a placement"}
+{"id": "q33", "split": "test", "question": "How many days do I have to accept an offer on the portal?", "doc": "12-offer-letters", "fact": "7 days"}
+{"id": "q34", "split": "test", "question": "Why is my take-home pay less than the package?", "doc": "13-stipend-ctc", "fact": "in-hand salary is lower"}
+{"id": "q35", "split": "test", "question": "Can an offer be cancelled after a background check?", "doc": "14-background-check", "fact": "withdrawn"}
+{"id": "q36", "split": "test", "question": "How quickly will a complaint be answered?", "doc": "15-grievances", "fact": "2 working days"}
+{"id": "q37", "split": "test", "question": "My grievance was not solved in two weeks, who do I go to?", "doc": "15-grievances", "fact": "Dean of Student Welfare"}
+{"id": "q38", "split": "test", "question": "How long is the password reset link valid?", "doc": "16-password-reset", "fact": "30 minutes"}
+{"id": "q39", "split": "test", "question": "Where is the placement office and when is it open?", "doc": "18-contact", "fact": "Administrative Block"}
+{"id": "q40", "split": "test", "question": "I got a job outside campus, what do I do?", "doc": "19-off-campus", "fact": "within 7 days"}
+{"id": "q41", "split": "test", "question": "When is my profile data deleted after I graduate?", "doc": "20-data-privacy", "fact": "three years"}
+{"id": "q42", "split": "test", "question": "What is the mess menu for this week?", "doc": null, "fact": null}
+{"id": "q43", "split": "test", "question": "How do I get a bonafide certificate for a passport?", "doc": null, "fact": null}
+{"id": "q44", "split": "test", "question": "When do the semester exams start?", "doc": null, "fact": null}
+{"id": "q45", "split": "test", "question": "What is the university bus timing from Clement Town?", "doc": null, "fact": null}
+{"id": "q46", "split": "test", "question": "Can I change my elective subject this semester?", "doc": null, "fact": null}

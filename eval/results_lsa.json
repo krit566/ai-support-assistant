@@ -1,0 +1,115 @@
+{
+ "embedder": "lsa",
+ "chunks": 53,
+ "articles": 20,
+ "questions": {
+  "dev": 14,
+  "test": 32
+ },
+ "thresholds_from_dev": {
+  "min_dense": 0.98,
+  "min_bm25": 3.5
+ },
+ "retrieval_test": {
+  "bm25": {
+   "recall@1": 0.889,
+   "recall@3": 0.963,
+   "MRR": 0.92,
+   "n": 27
+  },
+  "dense": {
+   "recall@1": 0.889,
+   "recall@3": 0.963,
+   "MRR": 0.92,
+   "n": 27
+  },
+  "hybrid": {
+   "recall@1": 0.889,
+   "recall@3": 0.963,
+   "MRR": 0.92,
+   "n": 27
+  }
+ },
+ "answers_test_extractive": {
+  "answer_accuracy": 0.704,
+  "correct": 19,
+  "answerable": 27,
+  "unanswerable_refused": "3/5",
+  "answerable_wrongly_refused": "1/27",
+  "misses": [
+   {
+    "id": "q15",
+    "why": "key fact missing",
+    "sources": [
+     "01-portal-registration#registration-fee",
+     "01-portal-registration#how-to-register"
+    ]
+   },
+   {
+    "id": "q18",
+    "why": "wrong source",
+    "sources": [
+     "01-portal-registration#who-can-register"
+    ]
+   },
+   {
+    "id": "q21",
+    "why": "refused an answerable question"
+   },
+   {
+    "id": "q23",
+    "why": "key fact missing",
+    "sources": [
+     "16-password-reset#account-locked",
+     "05-application-status#changing-status"
+    ]
+   },
+   {
+    "id": "q25",
+    "why": "key fact missing",
+    "sources": [
+     "07-one-offer-policy#dream-companies"
+    ]
+   },
+   {
+    "id": "q31",
+    "why": "key fact missing",
+    "sources": [
+     "10-attendance#pre-placement-talks",
+     "09-documents#mandatory-documents"
+    ]
+   },
+   {
+    "id": "q35",
+    "why": "key fact missing",
+    "sources": [
+     "14-background-check#what-is-checked",
+     "10-attendance#missing-a-ppt"
+    ]
+   },
+   {
+    "id": "q36",
+    "why": "wrong source",
+    "sources": [
+     "18-contact#email"
+    ]
+   },
+   {
+    "id": "q44",
+    "why": "answered an unanswerable question",
+    "sources": [
+     "04-applying#after-applying",
+     "10-attendance#permission"
+    ]
+   },
+   {
+    "id": "q45",
+    "why": "answered an unanswerable question",
+    "sources": [
+     "16-password-reset#university-email-not-working",
+     "10-attendance#permission"
+    ]
+   }
+  ]
+ }
+}

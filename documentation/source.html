@@ -1,0 +1,111 @@
+<h2>Overview</h2>
+<p>A retrieval-augmented (RAG) support assistant that answers students' questions about a (fictional) university Placement Cell
+from its help-centre articles. Every answer shows <b>the articles it came from</b>, and when the help centre does not cover a
+question it says <b>"I could not find this"</b> instead of guessing. It is measured on a held-out question set, and CI fails the
+build if retrieval quality drops.</p>
+<div class="stats">
+  <div class="stat"><b>96%</b><span>right article in the top 3 (held-out test)</span></div>
+  <div class="stat"><b>0.92</b><span>MRR, hybrid retrieval</span></div>
+  <div class="stat"><b>1/27</b><span>answerable questions wrongly refused</span></div>
+  <div class="stat"><b>15</b><span>tests + an evaluation gate in CI</span></div>
+</div>
+<img class="shot" src="file:///C:/Users/ashut/Downloads/New%20folder%20(9)/kriti-projects/ai-support-assistant/docs/screenshot.png" alt="Chat page with cited answers and a refusal">
+<p>The screenshot shows two answered questions with their sources and one out-of-scope question (hostel curfew) that is refused.</p>
+
+<h2>How a question is answered</h2>
+<div class="mermaid">
+flowchart TD
+  Q[Question] --> R[Hybrid retrieval over 53 chunks / 20 articles<br/>BM25 + embeddings, Reciprocal Rank Fusion]
+  R --> T{Best match weak<br/>on both signals?}
+  T -- yes --> N["I could not find this…"<br/>no model is called]
+  T -- no --> G{LLM enabled?}
+  G -- no --> E[Extractive answer<br/>IDF-weighted sentences]
+  G -- yes --> L[LLM answer from numbered sources]
+  L --> V{Cites only sources<br/>it was given?}
+  V -- no --> E
+  V -- yes --> A[Answer + sources]
+  E --> A
+</div>
+<ol>
+<li><b>Chunking</b>: one chunk per article section; long sections split into 120-word windows with 30-word overlap. Each chunk keeps its article and section, so it can be cited.</li>
+<li><b>Keyword search (BM25)</b>, written out by hand: rare words count more (IDF), repeated words saturate (<code>k1</code>), long chunks are not favoured (<code>b</code>).</li>
+<li><b>Semantic search</b>: cosine similarity over embeddings. Offline default: LSA (TF-IDF + truncated SVD); pretrained sentence-transformers or an embeddings API are drop-in options.</li>
+<li><b>Reciprocal Rank Fusion</b> merges the two rankings by position, so their different score scales never have to be compared.</li>
+<li><b>Refuse rule</b>: if the best chunk is weak on <i>both</i> signals (dense &lt; 0.98 and BM25 &lt; 3.5, chosen on the dev split), the assistant refuses and no model is called.</li>
+<li><b>Answer</b>: extractive by default (the most informative sentences, weighted by IDF). With an LLM enabled, the model gets numbered sources and must cite only those numbers; otherwise the extractive answer is used.</li>
+</ol>
+
+<h2>Evaluation</h2>
+<p>46 questions written for this project: 37 answerable (each labelled with the article that answers it and one key fact) and 9
+the help centre does not cover. They are deliberately paraphrased ("uncleared subject" instead of "backlog") and split into
+<b>dev (14)</b> for choosing thresholds and <b>test (32)</b> for reporting.</p>
+<table>
+<tr><th>Metric (test split, LSA embedder, extractive answers)</th><th>Value</th></tr>
+<tr><td>Right article ranked first (recall@1), hybrid</td><td>89% (24/27)</td></tr>
+<tr><td>Right article in the top 3 (recall@3)</td><td>96% (26/27)</td></tr>
+<tr><td>MRR</td><td>0.92</td></tr>
+<tr><td>Answer correct: right article <b>and</b> the key fact</td><td>70% (19/27)</td></tr>
+<tr><td>Unanswerable questions correctly refused</td><td>3/5</td></tr>
+<tr><td>Answerable questions wrongly refused</td><td>1/27</td></tr>
+</table>
+<h3>What the numbers say</h3>
+<ul>
+<li><b>Retrieval is strong, sentence choice is weak.</b> Most wrong answers found the right article but quoted the wrong sentence. The LLM answer step is the natural fix; it is implemented but not yet evaluated, so no number is claimed for it.</li>
+<li><b>Refusing is hard with LSA.</b> LSA similarities are high for almost every chunk, so in practice the keyword score decides refusals. Pretrained embeddings should separate in-scope from out-of-scope questions better.</li>
+<li><b>BM25, dense and hybrid score the same here.</b> 20 short articles full of distinctive words suit keywords; dense retrieval should matter more on larger, vaguer collections.</li>
+</ul>
+<div class="note warn">The articles and questions were written by the same person, and the test set is small (one question ≈ 3
+points), so the scores are optimistic. The design was revised once after the first test run (IDF-weighted sentence choice,
+light stemming); before that, recall@1 was 85% and answer accuracy 67%. No further tuning used the test split.</div>
+
+<h2>API and operations</h2>
+<table>
+<tr><th>Endpoint</th><th>What</th></tr>
+<tr><td><code>GET /</code></td><td>Chat page (shareable: <code>/?q=your+question</code> asks it on load)</td></tr>
+<tr><td><code>POST /ask</code></td><td><code>{"question": "..."}</code> → answer text, sources, whether it refused, mode</td></tr>
+<tr><td><code>GET /metrics</code></td><td>Questions answered vs refused, refusal rate, p50/p95 latency</td></tr>
+<tr><td><code>GET /health</code></td><td>Chunk count, embedder, the thresholds in use</td></tr>
+</table>
+<ul>
+<li><b>Privacy</b>: one JSON log line per question with outcome, sources and latency, never the question text, which may contain personal data.</li>
+<li><b>Tracing</b>: <code>X-Request-ID</code> on every response.</li>
+<li><b>CI</b>: tests, then the evaluation; the build fails if hybrid recall@3 falls below 0.90; then the Docker image is built.</li>
+<li><b>Deploy</b>: <code>render.yaml</code> blueprint for a one-click demo on Render.</li>
+</ul>
+
+<h2>Code map</h2>
+<table>
+<tr><th>File</th><th>What</th></tr>
+<tr><td><code>assistant/chunking.py</code></td><td>Section chunks with overlap; each keeps its source</td></tr>
+<tr><td><code>assistant/embeddings.py</code></td><td>Tokeniser (stopwords, light stemming) and the <code>lsa</code> / <code>sbert</code> / <code>api</code> embedders</td></tr>
+<tr><td><code>assistant/retriever.py</code></td><td>BM25, cosine search, Reciprocal Rank Fusion, refuse rule</td></tr>
+<tr><td><code>assistant/answer.py</code></td><td>Extractive answers; LLM answers validated against the given sources</td></tr>
+<tr><td><code>assistant/core.py</code>, <code>api.py</code>, <code>cli.py</code></td><td>Wiring, HTTP API and chat page, command line</td></tr>
+<tr><td><code>eval/run_eval.py</code></td><td>Threshold search on dev, metrics on test</td></tr>
+</table>
+<pre><code>pip install -r requirements.txt
+python -m assistant.cli "Can I withdraw after my interview is scheduled?"
+uvicorn assistant.api:app --reload     # chat page at http://127.0.0.1:8000/
+python -m pytest -q                    # 15 tests
+python eval/run_eval.py                # evaluation (offline)</code></pre>
+
+<h2>Next steps</h2>
+<ul>
+<li>Evaluate the LLM answer mode and pretrained embeddings on the same test split.</li>
+<li>Real documents (with permission) and questions written by someone other than the author.</li>
+<li>Feedback buttons on answers to collect real failure cases; conversation memory.</li>
+</ul>
+
+<h2>Interview questions</h2>
+<dl class="qa">
+<dt>What do BM25's <code>k1</code> and <code>b</code> do?</dt>
+<dd><code>k1</code> limits how much repeating a word keeps adding; <code>b</code> controls how much long chunks are penalised. IDF makes rare words count more than common ones.</dd>
+<dt>Why fuse by rank instead of adding scores?</dt>
+<dd>BM25 scores are unbounded and cosine scores lie between −1 and 1; adding them lets one dominate. Rank fusion only uses positions.</dd>
+<dt>Why choose thresholds on dev and report on test?</dt>
+<dd>Tuning on the test set makes the reported numbers describe that set, not new questions (overfitting to the test set).</dd>
+<dt>Why check an LLM's citations?</dt>
+<dd>A model can cite sources it was never given or invent facts. Accepting only citations to the provided chunks keeps answers traceable.</dd>
+<dt>Why refuse instead of guessing?</dt>
+<dd>A wrong answer about placement rules can cost a student an opportunity; "I could not find this, contact the Placement Cell" is safer.</dd>
+</dl>
