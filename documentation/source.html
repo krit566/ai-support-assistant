@@ -1,111 +1,205 @@
 <h2>Overview</h2>
-<p>A retrieval-augmented (RAG) support assistant that answers students' questions about a (fictional) university Placement Cell
-from its help-centre articles. Every answer shows <b>the articles it came from</b>, and when the help centre does not cover a
-question it says <b>"I could not find this"</b> instead of guessing. It is measured on a held-out question set, and CI fails the
-build if retrieval quality drops.</p>
+<p><b>HelpDesk AI</b> is a support assistant that any team can set up on its own documents. A team uploads help
+articles, policies or FAQs (PDF, Markdown or text). Customers then ask questions on a public chat page; the assistant
+answers <b>only from those documents</b>, shows <b>the exact passage each answer came from</b>, and says <b>"I could not
+find this"</b> instead of guessing when the documents do not cover a question. The team sees what customers ask, what
+was refused, and which answers were rated unhelpful, which tells them what to write next.</p>
 <div class="stats">
-  <div class="stat"><b>96%</b><span>right article in the top 3 (held-out test)</span></div>
-  <div class="stat"><b>0.92</b><span>MRR, hybrid retrieval</span></div>
-  <div class="stat"><b>1/27</b><span>answerable questions wrongly refused</span></div>
-  <div class="stat"><b>15</b><span>tests + an evaluation gate in CI</span></div>
+  <div class="stat"><b>96%</b><span>right article in the top 3 (held-out test questions)</span></div>
+  <div class="stat"><b>9</b><span>database tables, schema managed by Alembic migrations</span></div>
+  <div class="stat"><b>53</b><span>automated tests: 42 backend on real PostgreSQL, 11 frontend</span></div>
+  <div class="stat"><b>0</b><span>axe accessibility violations in the tested pages</span></div>
 </div>
-<img class="shot" src="file:///C:/Users/ashut/Downloads/New%20folder%20(9)/kriti-projects/ai-support-assistant/docs/screenshot.png" alt="Chat page with cited answers and a refusal">
-<p>The screenshot shows two answered questions with their sources and one out-of-scope question (hostel curfew) that is refused.</p>
+<img class="shot" src="file:///C:/Users/ashut/Downloads/New%20folder%20(9)/kriti-projects/ai-support-assistant/docs/screenshot-playground.png" alt="Playground with a cited answer and a refusal">
+<p>React + TypeScript · FastAPI · PostgreSQL · SQLAlchemy and Alembic · hand-written BM25 with embeddings (retrieval-augmented
+generation) · JWT and bcrypt · Docker · GitHub Actions.</p>
+
+<h2>Who uses it and how</h2>
+<table>
+<tr><th>Person</th><th>What they do</th></tr>
+<tr><td>Admin</td><td>Creates the workspace and knowledge bases, uploads documents (drag and drop), checks how each was split into passages, re-uploads new versions, creates public keys, invites agents.</td></tr>
+<tr><td>Agent</td><td>Tests questions in the playground, clicks citations to read the source passage, rates answers, reads conversations and analytics.</td></tr>
+<tr><td>Customer</td><td>Asks on the public chat page <code>/chat/&lt;knowledge base&gt;?key=…</code> without signing in.</td></tr>
+<tr><td>Support lead</td><td>Uses analytics: volume per day, refusal rate, helpful rate, answer time, <b>gaps</b> (refused questions grouped by topic) and low-rated answers with comments.</td></tr>
+</table>
+
+<h2>Architecture</h2>
+<div class="mermaid">
+flowchart LR
+  subgraph Browser
+    UI[React console]
+    W[Public chat page]
+  end
+  UI -- JWT --> R
+  W -- X-API-Key, rate-limited --> R
+  subgraph API[FastAPI]
+    R[Routes, roles,<br/>workspace isolation] --> I[Ingest<br/>PDF / MD / TXT]
+    R --> X[Index cache<br/>per knowledge base]
+    X --> E[Engine: BM25 + embeddings,<br/>RRF, refuse rule, answer]
+  end
+  R <--> DB[(PostgreSQL)]
+  X <--> DB
+</div>
+<table>
+<tr><th>Part</th><th>Responsibility</th></tr>
+<tr><td><code>backend/assistant/</code></td><td>The retrieval engine: chunking, tokenising, BM25 written out by hand, LSA / sentence-transformers / API embeddings, Reciprocal Rank Fusion, the refuse rule, extractive and LLM answers.</td></tr>
+<tr><td><code>backend/app/ingest.py</code></td><td>Upload checks (size, type, content) and parsing: Markdown by "##" sections, PDFs by page, text by paragraphs.</td></tr>
+<tr><td><code>backend/app/index.py</code></td><td>One in-memory index per knowledge base, rebuilt when its <code>index_version</code> changes; threshold scaling; attaches the cited passage text to each answer.</td></tr>
+<tr><td><code>backend/app/routes/</code></td><td>Auth, knowledge bases and documents, chat and analytics, public widget.</td></tr>
+<tr><td><code>backend/app/analytics.py</code></td><td>Per-day volume, refusal rate, percentiles (SQL <code>percentile_cont</code>), gaps, low-rated answers.</td></tr>
+<tr><td><code>frontend/src/</code></td><td>React Router pages, one shared chat component for the playground and the public page, hand-written SVG charts.</td></tr>
+</table>
+
+<h2>Data model</h2>
+<div class="mermaid">
+erDiagram
+  WORKSPACE ||--o{ USER : has
+  WORKSPACE ||--o{ KNOWLEDGE_BASE : owns
+  KNOWLEDGE_BASE ||--o{ DOCUMENT : contains
+  DOCUMENT ||--o{ CHUNK : "split into"
+  KNOWLEDGE_BASE ||--o{ API_KEY : "public keys"
+  KNOWLEDGE_BASE ||--o{ CONVERSATION : receives
+  CONVERSATION ||--o{ MESSAGE : contains
+  MESSAGE ||--o| FEEDBACK : "rated by"
+</div>
+<ul>
+<li><b>Documents</b> keep their extracted text, so they can be re-chunked later without the original file; a re-upload with the same name increments <code>version</code>.</li>
+<li><b>Messages</b> store the cited passages (JSONB) as they were at answer time, so an old answer still shows its evidence after the document changes.</li>
+<li><b>Chunks</b> can store an embedding vector (<code>float[]</code>) for embedders that do not depend on the rest of the corpus; LSA vectors are recomputed at rebuild.</li>
+<li>All foreign keys use <code>ON DELETE CASCADE</code>; deleting a knowledge base removes its documents, keys and conversations.</li>
+</ul>
 
 <h2>How a question is answered</h2>
 <div class="mermaid">
 flowchart TD
-  Q[Question] --> R[Hybrid retrieval over 53 chunks / 20 articles<br/>BM25 + embeddings, Reciprocal Rank Fusion]
-  R --> T{Best match weak<br/>on both signals?}
-  T -- yes --> N["I could not find this…"<br/>no model is called]
+  Q[Question] --> R[Hybrid retrieval<br/>BM25 + embeddings, Reciprocal Rank Fusion]
+  R --> T{Best passage weak<br/>on both signals?}
+  T -- yes --> N[The knowledge base's 'not found' message<br/>no model is called]
   T -- no --> G{LLM enabled?}
-  G -- no --> E[Extractive answer<br/>IDF-weighted sentences]
-  G -- yes --> L[LLM answer from numbered sources]
-  L --> V{Cites only sources<br/>it was given?}
+  G -- no --> E[Extractive: most informative sentences]
+  G -- yes --> L[LLM answer from numbered passages]
+  L --> V{Cites only the passages<br/>it was given?}
   V -- no --> E
-  V -- yes --> A[Answer + sources]
+  V -- yes --> A[Answer + cited passages]
   E --> A
 </div>
 <ol>
-<li><b>Chunking</b>: one chunk per article section; long sections split into 120-word windows with 30-word overlap. Each chunk keeps its article and section, so it can be cited.</li>
-<li><b>Keyword search (BM25)</b>, written out by hand: rare words count more (IDF), repeated words saturate (<code>k1</code>), long chunks are not favoured (<code>b</code>).</li>
-<li><b>Semantic search</b>: cosine similarity over embeddings. Offline default: LSA (TF-IDF + truncated SVD); pretrained sentence-transformers or an embeddings API are drop-in options.</li>
-<li><b>Reciprocal Rank Fusion</b> merges the two rankings by position, so their different score scales never have to be compared.</li>
-<li><b>Refuse rule</b>: if the best chunk is weak on <i>both</i> signals (dense &lt; 0.98 and BM25 &lt; 3.5, chosen on the dev split), the assistant refuses and no model is called.</li>
-<li><b>Answer</b>: extractive by default (the most informative sentences, weighted by IDF). With an LLM enabled, the model gets numbered sources and must cite only those numbers; otherwise the extractive answer is used.</li>
+<li><b>BM25</b> scores exact words; rare words count more (IDF), repeats saturate (<code>k1</code>), long passages are not favoured (<code>b</code>).</li>
+<li><b>Embeddings</b> score meaning; LSA (TF-IDF + truncated SVD) offline by default, plain TF-IDF for knowledge bases under 8 passages.</li>
+<li><b>Reciprocal Rank Fusion</b> merges the two rankings by position, so their different score scales never need to be compared.</li>
+<li><b>Refuse rule:</b> if the best passage is weak on both signals the assistant refuses with the knowledge base's own message.</li>
+<li><b>Answer:</b> extractive by default; with an LLM configured, the reply must cite passage numbers it was given, or the extractive answer is used.</li>
 </ol>
 
+<h2>Engineering decisions</h2>
+<h3>Index in memory, version in the database</h3>
+<p>Every document change increments <code>knowledge_bases.index_version</code> in the same transaction (as an SQL expression, so
+two concurrent uploads both count). Before answering, a process compares its cached version with the database's and
+rebuilds if they differ, which keeps several server processes consistent without a message bus.</p>
+<p><b>Why not pgvector?</b> BM25 needs word statistics over the whole knowledge base and LSA is fitted on all passages, so both
+are rebuilt from all passages anyway; for a few thousand passages that takes well under a second. pgvector would move
+nearest-neighbour search into the database for very large collections, but keyword search would still need a separate
+full-text index and the rankings would still be fused in the application.</p>
+<h3>Thresholds do not transfer between corpus sizes</h3>
+<p>The refuse thresholds were tuned on the 53-passage placement-cell corpus. The first product version refused
+<b>every</b> question on a small knowledge base: BM25 scores shrink with corpus size (a word found in 1 of 2 passages weighs
+0.69, in 1 of 53 it weighs 3.58), so the tuned bar of 3.5 was unreachable. The BM25 threshold is now expressed in units of
+"one rare word" and converted for each knowledge base. On the placement corpus the conversion is exactly a no-op.</p>
+<div class="note">A test uploads the 20 evaluated articles through the API and checks that the product makes the <b>same
+rankings and the same refuse decisions</b> as the evaluated engine for all 46 evaluation questions, so the evaluation
+numbers describe the product.</div>
+
 <h2>Evaluation</h2>
-<p>46 questions written for this project: 37 answerable (each labelled with the article that answers it and one key fact) and 9
-the help centre does not cover. They are deliberately paraphrased ("uncleared subject" instead of "backlog") and split into
-<b>dev (14)</b> for choosing thresholds and <b>test (32)</b> for reporting.</p>
+<p>46 questions written for this project: 37 answerable (each labelled with its article and one key fact) and 9 not
+covered. Dev split (14) for choosing thresholds, test split (32) for reporting; offline LSA embedder, extractive answers.</p>
 <table>
-<tr><th>Metric (test split, LSA embedder, extractive answers)</th><th>Value</th></tr>
+<tr><th>Metric (test split)</th><th>Value</th></tr>
 <tr><td>Right article ranked first (recall@1), hybrid</td><td>89% (24/27)</td></tr>
 <tr><td>Right article in the top 3 (recall@3)</td><td>96% (26/27)</td></tr>
 <tr><td>MRR</td><td>0.92</td></tr>
-<tr><td>Answer correct: right article <b>and</b> the key fact</td><td>70% (19/27)</td></tr>
+<tr><td>Answer correct: right article and the key fact</td><td>70% (19/27)</td></tr>
 <tr><td>Unanswerable questions correctly refused</td><td>3/5</td></tr>
 <tr><td>Answerable questions wrongly refused</td><td>1/27</td></tr>
 </table>
-<h3>What the numbers say</h3>
+<div class="note warn">Refusing is the weak spot. In the demo, "Which buses go to the city campus?" is answered with the
+off-campus offers article because "campus" matches, and "How do I raise a complaint about a recruiter?" is refused
+although a grievances article exists. The articles and questions were written by one person and the test set is small
+(one question ≈ 3 points), so all scores are optimistic. CI fails the build if recall@3 drops below 0.90.</div>
+
+<h2>Analytics and the feedback loop</h2>
+<img class="shot" src="file:///C:/Users/ashut/Downloads/New%20folder%20(9)/kriti-projects/ai-support-assistant/docs/screenshot-analytics.png" alt="Analytics page">
 <ul>
-<li><b>Retrieval is strong, sentence choice is weak.</b> Most wrong answers found the right article but quoted the wrong sentence. The LLM answer step is the natural fix; it is implemented but not yet evaluated, so no number is claimed for it.</li>
-<li><b>Refusing is hard with LSA.</b> LSA similarities are high for almost every chunk, so in practice the keyword score decides refusals. Pretrained embeddings should separate in-scope from out-of-scope questions better.</li>
-<li><b>BM25, dense and hybrid score the same here.</b> 20 short articles full of distinctive words suit keywords; dense retrieval should matter more on larger, vaguer collections.</li>
+<li><b>Questions per day</b>, answered vs refused, every day in the range including empty days.</li>
+<li><b>Refusal rate, helpful rate, p50/p95 answer time</b> (SQL <code>percentile_cont</code>; shown as "–" when nothing was timed).</li>
+<li><b>Gaps:</b> refused questions grouped by their most frequent informative word; each group is a candidate article.</li>
+<li><b>Low-rated answers</b> with the customer's question, comment and the passages that were cited.</li>
 </ul>
-<div class="note warn">The articles and questions were written by the same person, and the test set is small (one question ≈ 3
-points), so the scores are optimistic. The design was revised once after the first test run (IDF-weighted sentence choice,
-light stemming); before that, recall@1 was 85% and answer accuracy 67%. No further tuning used the test split.</div>
+<div class="note">The demo seed asks 16 sample questions through the real engine; their thumbs up/down are invented and the
+conversations are labelled "demo" in the UI.</div>
 
-<h2>API and operations</h2>
+<h2>Documents and the public widget</h2>
+<img class="shot" src="file:///C:/Users/ashut/Downloads/New%20folder%20(9)/kriti-projects/ai-support-assistant/docs/screenshot-documents.png" alt="Documents page">
 <table>
-<tr><th>Endpoint</th><th>What</th></tr>
-<tr><td><code>GET /</code></td><td>Chat page (shareable: <code>/?q=your+question</code> asks it on load)</td></tr>
-<tr><td><code>POST /ask</code></td><td><code>{"question": "..."}</code> → answer text, sources, whether it refused, mode</td></tr>
-<tr><td><code>GET /metrics</code></td><td>Questions answered vs refused, refusal rate, p50/p95 latency</td></tr>
-<tr><td><code>GET /health</code></td><td>Chunk count, embedder, the thresholds in use</td></tr>
+<tr><th>Upload problem</th><th>Response</th></tr>
+<tr><td>Over the size limit (5 MB by default)</td><td>413</td></tr>
+<tr><td>Not PDF / Markdown / text, a ".pdf" that is not a PDF, non-UTF-8 or binary text</td><td>415</td></tr>
+<tr><td>Empty, blank, unreadable PDF or no text layer</td><td>422</td></tr>
+<tr><td>Same file again</td><td>200, nothing changes</td></tr>
+<tr><td>Same name, new content</td><td>200, version + 1, old passages replaced, index refreshed</td></tr>
 </table>
-<ul>
-<li><b>Privacy</b>: one JSON log line per question with outcome, sources and latency, never the question text, which may contain personal data.</li>
-<li><b>Tracing</b>: <code>X-Request-ID</code> on every response.</li>
-<li><b>CI</b>: tests, then the evaluation; the build fails if hybrid recall@3 falls below 0.90; then the Docker image is built.</li>
-<li><b>Deploy</b>: <code>render.yaml</code> blueprint for a one-click demo on Render.</li>
-</ul>
+<p>The public page works with a <b>publishable key</b> created per knowledge base. The key is visible to visitors, so it can
+only ask questions of that one knowledge base, is stored only as a SHA-256 hash, can be revoked, and is rate-limited per
+key with a sliding 60-second window (429 with <code>Retry-After</code>).</p>
 
-<h2>Code map</h2>
+<h2>Security and privacy</h2>
 <table>
-<tr><th>File</th><th>What</th></tr>
-<tr><td><code>assistant/chunking.py</code></td><td>Section chunks with overlap; each keeps its source</td></tr>
-<tr><td><code>assistant/embeddings.py</code></td><td>Tokeniser (stopwords, light stemming) and the <code>lsa</code> / <code>sbert</code> / <code>api</code> embedders</td></tr>
-<tr><td><code>assistant/retriever.py</code></td><td>BM25, cosine search, Reciprocal Rank Fusion, refuse rule</td></tr>
-<tr><td><code>assistant/answer.py</code></td><td>Extractive answers; LLM answers validated against the given sources</td></tr>
-<tr><td><code>assistant/core.py</code>, <code>api.py</code>, <code>cli.py</code></td><td>Wiring, HTTP API and chat page, command line</td></tr>
-<tr><td><code>eval/run_eval.py</code></td><td>Threshold search on dev, metrics on test</td></tr>
+<tr><th>Concern</th><th>How</th></tr>
+<tr><td>Passwords</td><td>bcrypt; same error and similar timing for unknown email and wrong password.</td></tr>
+<tr><td>Sessions</td><td>JWT, HS256 pinned, expiry; the role is re-read from the database on every request.</td></tr>
+<tr><td>Isolation</td><td>All queries scoped to the caller's workspace; other workspaces' ids return 404 (tested for 9 endpoints).</td></tr>
+<tr><td>Roles</td><td>Agents ask, rate and read; only admins change documents, keys, users and settings.</td></tr>
+<tr><td>Uploads</td><td>Size limit, extension allow-list plus content check, file names sanitised (no paths).</td></tr>
+<tr><td>LLM</td><td>Optional; key only on the server; citations validated.</td></tr>
+<tr><td>Logs</td><td>JSON lines with request ID, outcome, sources and timing; never the question text.</td></tr>
 </table>
-<pre><code>pip install -r requirements.txt
-python -m assistant.cli "Can I withdraw after my interview is scheduled?"
-uvicorn assistant.api:app --reload     # chat page at http://127.0.0.1:8000/
-python -m pytest -q                    # 15 tests
-python eval/run_eval.py                # evaluation (offline)</code></pre>
 
-<h2>Next steps</h2>
+<h2>Testing and delivery</h2>
+<table>
+<tr><th>Suite</th><th>Covers</th></tr>
+<tr><td>Engine (15)</td><td>Chunking, BM25, retrieval on known questions, refusals, LLM citation check.</td></tr>
+<tr><td>Product API (21)</td><td>Accounts, uploads and 8 kinds of bad upload, versions, deletion, refusal message, product index equals evaluated engine, isolation, roles, feedback, analytics, keys, rate limit, revocation.</td></tr>
+<tr><td>Units (6)</td><td>Threshold scaling, rate-limit window with a fake clock, file-name sanitising, chunking.</td></tr>
+<tr><td>Frontend (11)</td><td>Sign-in, redirects, citation panel, follow-ups, refusals, shareable links, uploads, analytics, public key handling, axe scans.</td></tr>
+</table>
+<p>Backend tests run on a <b>real PostgreSQL</b> (an embedded server locally, a postgres service container in CI) with the schema
+built by running the Alembic migrations. GitHub Actions runs backend tests and the evaluation gate, frontend tests and build,
+then builds both Docker images. <code>docker-compose.yml</code> runs PostgreSQL, the API and nginx (serving the app and forwarding
+<code>/api</code>); <code>render.yaml</code> deploys the same pieces to Render.</p>
+<pre><code>docker compose up --build                         # http://localhost:8080
+docker compose exec backend python -m app.seed    # demo workspace
+cd backend &amp;&amp; python -m pytest -q                 # 42 tests
+cd frontend &amp;&amp; npm test                           # 11 tests</code></pre>
+
+<h2>Limitations and next steps</h2>
 <ul>
-<li>Evaluate the LLM answer mode and pretrained embeddings on the same test split.</li>
-<li>Real documents (with permission) and questions written by someone other than the author.</li>
-<li>Feedback buttons on answers to collect real failure cases; conversation memory.</li>
+<li>Refusal and sentence choice are the weak parts; next, evaluate pretrained embeddings and the LLM mode on the same split, and tune thresholds per knowledge base from thumbs-down data.</li>
+<li>Rate limiter and index cache are per process; with several instances the limiter moves to Redis.</li>
+<li>Uploads are parsed inside the request; large PDFs need a background job queue. No OCR for scanned PDFs.</li>
+<li>The session token is kept in <code>localStorage</code>; an httpOnly cookie with CSRF protection is stronger for production.</li>
 </ul>
 
 <h2>Interview questions</h2>
 <dl class="qa">
-<dt>What do BM25's <code>k1</code> and <code>b</code> do?</dt>
-<dd><code>k1</code> limits how much repeating a word keeps adding; <code>b</code> controls how much long chunks are penalised. IDF makes rare words count more than common ones.</dd>
-<dt>Why fuse by rank instead of adding scores?</dt>
-<dd>BM25 scores are unbounded and cosine scores lie between −1 and 1; adding them lets one dominate. Rank fusion only uses positions.</dd>
-<dt>Why choose thresholds on dev and report on test?</dt>
-<dd>Tuning on the test set makes the reported numbers describe that set, not new questions (overfitting to the test set).</dd>
-<dt>Why check an LLM's citations?</dt>
-<dd>A model can cite sources it was never given or invent facts. Accepting only citations to the provided chunks keeps answers traceable.</dd>
-<dt>Why refuse instead of guessing?</dt>
-<dd>A wrong answer about placement rules can cost a student an opportunity; "I could not find this, contact the Placement Cell" is safer.</dd>
+<dt>Why fuse rankings with RRF instead of adding scores?</dt>
+<dd>BM25 scores are unbounded and cosine similarities lie in [−1, 1]; adding them lets one dominate. RRF uses only positions.</dd>
+<dt>Why did the thresholds need rescaling?</dt>
+<dd>BM25's IDF depends on how many passages exist, so the same "one rare word" match scores 0.69 in a 2-passage knowledge base and 3.58 in a 53-passage one. A fixed threshold either refuses everything on small bases or nothing on large ones.</dd>
+<dt>How does the cache stay correct with several server processes?</dt>
+<dd>Each change bumps index_version in the same transaction; every process compares its cached version with the database before answering.</dd>
+<dt>Why return 404 for another workspace's ids?</dt>
+<dd>403 would confirm the id exists; 404 reveals nothing about other teams' data.</dd>
+<dt>Why bcrypt for passwords but SHA-256 for API keys?</dt>
+<dd>Passwords are short and guessable, so hashing must be slow; API keys are 24 random bytes, so a fast hash is already infeasible to reverse.</dd>
+<dt>What still protects a knowledge base if its public key leaks?</dt>
+<dd>The key can only ask questions of that one knowledge base, is rate-limited, and can be revoked without affecting other keys.</dd>
 </dl>

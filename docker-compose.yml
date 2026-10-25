@@ -1,0 +1,38 @@
+# Everything locally:  docker compose up --build   ->  http://localhost:8080
+# then seed demo data:  docker compose exec backend python -m app.seed
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: helpdesk
+      POSTGRES_USER: helpdesk
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-helpdesk-local-only}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U helpdesk -d helpdesk"]
+      interval: 3s
+      retries: 20
+
+  backend:
+    build: ./backend
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql://helpdesk:${POSTGRES_PASSWORD:-helpdesk-local-only}@db:5432/helpdesk
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (see .env.example)}
+      CORS_ORIGINS: http://localhost:8080
+      USE_LLM: ${USE_LLM:-false}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

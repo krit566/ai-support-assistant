@@ -1,0 +1,3 @@
+-r requirements.txt
+# embedded PostgreSQL for running the tests locally without installing Postgres (CI uses a postgres container)
+pgserver>=0.1.4

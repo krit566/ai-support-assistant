@@ -1,0 +1,18 @@
+# retrieval engine
+numpy>=1.26
+scikit-learn>=1.4
+# API and database
+fastapi>=0.110
+uvicorn[standard]>=0.29
+sqlalchemy>=2.0
+alembic>=1.13
+psycopg[binary]>=3.1
+pyjwt>=2.8
+bcrypt>=4.1
+python-multipart>=0.0.9
+pypdf>=4.0
+# tests
+httpx>=0.27
+pytest>=8
+# optional: pretrained embeddings
+# sentence-transformers>=3.0

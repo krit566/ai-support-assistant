@@ -1,13 +1,45 @@
-# One-click deploy on Render (free tier): New + > Blueprint > pick this repo.
+# One-click deploy on Render: New + > Blueprint > pick this repo.
+# After the first deploy, set VITE_API_URL on the static site to the API's URL (e.g. https://helpdesk-api.onrender.com)
+# and CORS_ORIGINS on the API to the static site's URL, then redeploy both.
+databases:
+  - name: helpdesk-db
+    plan: free
+    databaseName: helpdesk
+
 services:
   - type: web
-    name: ai-support-assistant
+    name: helpdesk-api
     runtime: python
     plan: free
+    rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn assistant.api:app --host 0.0.0.0 --port $PORT
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.4"
-      # optional LLM answers: set GROQ_API_KEY in the Render dashboard (never in this file) and USE_LLM=true
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: helpdesk-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
+      # optional: USE_LLM=true and GROQ_API_KEY, set in the dashboard (never in this file)
+
+  - type: web
+    name: helpdesk-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        sync: false
